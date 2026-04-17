@@ -1,0 +1,30 @@
+// DNS Exfiltration Detection via Long Subdomain Queries
+// MITRE ATT&CK: T1071.004 - Application Layer Protocol: DNS
+
+DnsEvents
+| where TimeGenerated > ago(1h)
+| where QueryType == "A" or QueryType == "AAAA"
+| extend subdomain_length = strlen(Name)
+| extend label_count = countof(Name, ".")
+| extend entropy = calculate_entropy(Name)  // Custom function
+| where subdomain_length > 50 or label_count > 5 or entropy > 4.0
+| summarize 
+    query_count = count(),
+    unique_domains = dcount(Name),
+    sample_queries = make_set(Name, 5)
+    by Computer, ClientIP, bin(TimeGenerated, 5m)
+| where query_count > 20
+| extend severity = case(
+    query_count > 100, "High",
+    query_count > 50, "Medium",
+    "Low"
+)
+| project 
+    TimeGenerated,
+    Computer,
+    ClientIP,
+    query_count,
+    unique_domains,
+    sample_queries,
+    severity,
+    mitre_technique = "T1071.004"
